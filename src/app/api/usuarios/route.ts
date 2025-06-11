@@ -100,9 +100,6 @@ export async function POST(request: NextRequest) {
       return usuario
     })
 
-    // Log da operação
-    console.log(`Usuário criado por ${session.user.name} (${session.user.id}) - Novo usuário: ${email}`)
-
     return NextResponse.json({
       sucesso: true,
       usuario: novoUsuario,
@@ -293,9 +290,6 @@ export async function PUT(request: NextRequest) {
         createdAt: true
       }
     })
-
-    // Log da operação
-    console.log(`Usuário atualizado por ${session.user.name} (${session.user.id}) - Usuário: ${usuarioAtualizado.email}`)
 
     return NextResponse.json({
       sucesso: true,

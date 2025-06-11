@@ -32,13 +32,9 @@ export async function POST(request: NextRequest) {
     let userName = 'Usuário Teste'
 
     if (isDev && !session?.user?.id) {
-      console.log('🧪 Modo desenvolvimento: usando dados de teste')
       // Gerar dados MFA apenas para teste
       const mfaData = await setupMFA(userEmail)
       
-      console.log('✅ QR Code gerado (teste), URL length:', mfaData.qrCodeDataUrl.length)
-      console.log('✅ Backup codes gerados (teste):', mfaData.backupCodes.length)
-
       return NextResponse.json({
         sucesso: true,
         desenvolvimento: true,
@@ -60,17 +56,13 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    console.log('👤 Usuário encontrado:', usuario ? `${usuario.nome} (${usuario.email})` : 'Não encontrado')
-
     if (!usuario) {
-      console.log('❌ Erro: Usuário não encontrado no banco de dados')
       return NextResponse.json(
         { erro: 'Usuário não encontrado' },
         { status: 404 }
       )
     }    // Se MFA já está habilitado, retornar informação sobre status
     if (usuario.isMfaEnabled) {
-      console.log('⚠️ MFA já está habilitado para este usuário')
       return NextResponse.json({
         sucesso: true,
         jaConfigurado: true,
@@ -82,11 +74,8 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    console.log('🚀 Gerando dados MFA...')
     // Gerar dados MFA
     const mfaData = await setupMFA(usuario.email)
-    console.log('✅ QR Code gerado, secret length:', mfaData.secret.length)
-    console.log('✅ Backup codes gerados:', mfaData.backupCodes.length)
     
     // Criptografar secret antes de salvar
     const encryptedSecret = encryptData(mfaData.secret)    // Hash dos códigos de backup e salvar na tabela separada
@@ -111,8 +100,7 @@ export async function POST(request: NextRequest) {
       await tx.usuarioBackupCode.createMany({
         data: backupCodeData
       })
-    })    // Log da operação
-    console.log(`✅ Setup MFA iniciado para usuário ${usuario.nome} (${session!.user.id})`)
+    })
 
     return NextResponse.json({
       sucesso: true,
@@ -210,9 +198,6 @@ export async function PUT(request: NextRequest) {
       }
     })
 
-    // Log da operação
-    console.log(`MFA ativado para usuário ${usuario.nome} (${session.user.id})`)
-
     return NextResponse.json({
       sucesso: true,
       mensagem: 'MFA ativado com sucesso!'
@@ -289,9 +274,6 @@ export async function DELETE(request: NextRequest) {
         }
       })
     })
-
-    // Log da operação
-    console.log(`MFA desativado para usuário ${usuario.nome} (${usuarioId}) por admin ${session.user.name} (${session.user.id})`)
 
     return NextResponse.json({
       sucesso: true,

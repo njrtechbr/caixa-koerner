@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, STATUS_CAIXA, CARGOS } from '@/lib/database'
 import { FecharCaixaSchema } from '@/lib/schemas'
+import { verifyTOTP } from '@/lib/mfa'
+import { decryptData } from '@/lib/security'
 
 /**
  * API para fechar caixa diário
@@ -65,14 +67,34 @@ export async function POST(request: NextRequest) {
 
     // Verificar se o usuário tem MFA habilitado e validar código
     if (usuario.isMfaEnabled) {
-      // TODO: Implementar verificação de código TOTP
-      // Por agora, aceitar qualquer código de 6 dígitos para desenvolvimento
-      if (!/^\d{6}$/.test(mfaCode)) {
+      if (!usuario.mfaSecret) {
+        // This case should ideally not happen if MFA is enabled
+        console.error(`MFA enabled for user ${usuario.id} but mfaSecret is missing.`);
         return NextResponse.json(
-          { erro: 'Código MFA inválido' },
-          { status: 400 }
-        )
+          { erro: 'Configuração MFA inválida para o usuário.' },
+          { status: 500 }
+        );
       }
+      if (!mfaCode || !/^\d{6}$/.test(mfaCode)) {
+        return NextResponse.json(
+          { erro: 'Formato do código MFA inválido.' },
+          { status: 400 }
+        );
+      }
+      const secret = decryptData(usuario.mfaSecret);
+      const isValidMFA = verifyTOTP(mfaCode, secret);
+      if (!isValidMFA) {
+        return NextResponse.json(
+          { erro: 'Código MFA inválido.' },
+          { status: 400 }
+        );
+      }
+    } else {
+      // If MFA is not enabled for the user, but the operation still requires it by policy (e.g. for all financial operations)
+      // This part depends on application policy. Assuming for now that if user.isMfaEnabled is false, we don't check.
+      // However, if company policy dictates all 'fechar caixa' needs MFA, this needs adjustment.
+      // For now, matching existing logic where if `isMfaEnabled` is false, it's skipped.
+      // Consider adding a check here if all 'fechar caixa' must have MFA regardless of user's general MFA status.
     }
 
     const hoje = new Date()
@@ -122,9 +144,6 @@ export async function POST(request: NextRequest) {
 
       return caixaAtualizado
     })
-
-    // Log da operação
-    console.log(`Caixa fechado por ${usuario.nome} (${session.user.id}) - Valor total: R$ ${valorTotal}`)
 
     return NextResponse.json({
       sucesso: true,
