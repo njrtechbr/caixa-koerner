@@ -176,9 +176,6 @@ export async function POST(request: NextRequest) {
       })
     })
 
-    // Log da operação
-    console.log(`Caixa aberto por ${usuario.nome} (${session.user.id}) - Valor inicial: R$ ${valorInicial}`)
-
     return NextResponse.json({
       sucesso: true,
       caixa: {
