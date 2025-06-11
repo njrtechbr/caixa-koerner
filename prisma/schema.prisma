@@ -1,0 +1,173 @@
+// Schema do Sistema de Controle de Caixa - Cartório Koerner
+// Baseado no documento de especificação técnica
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Tabela de Usuários e Funções
+model Usuario {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nome          String   @db.VarChar(255)
+  email         String   @unique @db.VarChar(255)
+  senha         String   @db.VarChar(255) // Armazenar hash bcrypt
+  cargo         String   @db.VarChar(50) // 'operador_caixa', 'supervisor_caixa', 'supervisor_conferencia', 'admin'
+  mfaSecret     String?  @db.Text // Criptografado
+  isMfaEnabled  Boolean  @default(false) @map("is_mfa_enabled")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relacionamentos
+  backupCodes                   UsuarioBackupCode[]
+  caixasAbertos                CaixaDiario[]             @relation("CaixaAbertura")
+  caixasFechados               CaixaDiario[]             @relation("CaixaFechamento")
+  caixasRevisados              CaixaDiario[]             @relation("CaixaRevisao")
+  conferenciaSupervisorCaixa   ConferenciaSupervisorCaixa[]
+  conferenciaDiaria            ConferenciaDiaria[]
+  movimentacoesSolicitadas     MovimentacaoCaixa[]       @relation("MovimentacaoSolicitante")
+  movimentacoesAprovadas       MovimentacaoCaixa[]       @relation("MovimentacaoAprovador")
+  correcoesSolicitadas         SolicitacaoCorrecao[]     @relation("CorrecaoSolicitante")
+  correcoesAprovadas           SolicitacaoCorrecao[]     @relation("CorrecaoAprovador")
+
+  @@map("usuarios")
+}
+
+// Tabela de Códigos de Recuperação para MFA
+model UsuarioBackupCode {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId String  @map("usuario_id") @db.Uuid
+  codeHash  String  @map("code_hash") @db.VarChar(255)
+  isUsed    Boolean @default(false) @map("is_used")
+
+  // Relacionamentos
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("usuarios_backup_codes")
+}
+
+// Tabela de Configurações Gerais do Sistema
+model ConfiguracaoSistema {
+  id     Int    @id @default(autoincrement())
+  chave  String @unique @db.VarChar(100)
+  valor  String @db.VarChar(255)
+
+  @@map("configuracoes_sistema")
+}
+
+// Tabela principal do movimento diário de cada caixa
+model CaixaDiario {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dataMovimento         DateTime  @map("data_movimento") @db.Date
+  valorInicial          Decimal   @map("valor_inicial") @db.Decimal(10, 2)
+  status                String    @db.VarChar(50) // 'Aberto', 'Fechado - Aguardando Conferência', etc.
+  abertoPorUsuarioId    String?   @map("aberto_por_usuario_id") @db.Uuid
+  dataAbertura          DateTime? @map("data_abertura") @db.Timestamptz
+  fechadoPorUsuarioId   String?   @map("fechado_por_usuario_id") @db.Uuid
+  dataFechamento        DateTime? @map("data_fechamento") @db.Timestamptz
+  revisadoPorUsuarioId  String?   @map("revisado_por_usuario_id") @db.Uuid
+  dataRevisao           DateTime? @map("data_revisao") @db.Timestamptz
+  motivoRejeicao        String?   @map("motivo_rejeicao") @db.Text
+  valorSistemaW6        Decimal?  @map("valor_sistema_w6") @db.Decimal(10, 2)
+
+  // Relacionamentos
+  abertoPorUsuario           Usuario?                     @relation("CaixaAbertura", fields: [abertoPorUsuarioId], references: [id])
+  fechadoPorUsuario          Usuario?                     @relation("CaixaFechamento", fields: [fechadoPorUsuarioId], references: [id])
+  revisadoPorUsuario         Usuario?                     @relation("CaixaRevisao", fields: [revisadoPorUsuarioId], references: [id])
+  transacoesFechamento       TransacaoFechamento[]
+  conferenciaSupervisorCaixa ConferenciaSupervisorCaixa?
+  movimentacoesCaixa         MovimentacaoCaixa[]
+  solicitacoesCorrecao       SolicitacaoCorrecao[]
+
+  @@map("caixa_diario")
+}
+
+// Tabela para os valores detalhados do fechamento do operador
+model TransacaoFechamento {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  caixaDiarioId   String      @map("caixa_diario_id") @db.Uuid
+  tipoPagamento   String      @map("tipo_pagamento") @db.VarChar(50) // 'Dinheiro', 'Pix', 'Débito', 'Mensalista', 'Outros'
+  valor           Decimal     @db.Decimal(10, 2)
+
+  // Relacionamentos
+  caixaDiario CaixaDiario @relation(fields: [caixaDiarioId], references: [id], onDelete: Cascade)
+
+  @@map("transacoes_fechamento")
+}
+
+// Tabela para a conferência cega do supervisor (usada apenas se a configuração estiver ativa)
+model ConferenciaSupervisorCaixa {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  caixaDiarioId         String    @unique @map("caixa_diario_id") @db.Uuid
+  supervisorId          String?   @map("supervisor_id") @db.Uuid
+  timestampConferencia  DateTime? @map("timestamp_conferencia") @db.Timestamptz
+  valorDinheiroContado  Decimal   @map("valor_dinheiro_contado") @db.Decimal(10, 2)
+
+  // Relacionamentos
+  caixaDiario CaixaDiario @relation(fields: [caixaDiarioId], references: [id], onDelete: Cascade)
+  supervisor  Usuario?    @relation(fields: [supervisorId], references: [id])
+
+  @@map("conferencia_supervisor_caixa")
+}
+
+// Tabela para registrar a validação final do dia
+model ConferenciaDiaria {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dataConferencia       DateTime  @unique @map("data_conferencia") @db.Date
+  valorTotalDeclarado   Decimal?  @map("valor_total_declarado") @db.Decimal(15, 2)
+  valorTotalConferido   Decimal?  @map("valor_total_conferido") @db.Decimal(15, 2)
+  conferidoPorUsuarioId String?   @map("conferido_por_usuario_id") @db.Uuid
+  timestampConferencia  DateTime? @map("timestamp_conferencia") @db.Timestamptz
+
+  // Relacionamentos
+  conferidoPorUsuario Usuario? @relation(fields: [conferidoPorUsuarioId], references: [id])
+
+  @@map("conferencia_diaria")
+}
+
+// Tabela para Movimentações Adicionais (Sangria, Entradas)
+model MovimentacaoCaixa {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  caixaDiarioId    String?   @map("caixa_diario_id") @db.Uuid
+  tipo             String    @db.VarChar(20) // 'entrada', 'sangria'
+  valor            Decimal   @db.Decimal(10, 2)
+  descricao        String?   @db.Text
+  status           String    @db.VarChar(20) // 'pendente', 'aprovado', 'reprovado'
+  solicitanteId    String?   @map("solicitante_id") @db.Uuid
+  dataSolicitacao  DateTime? @map("data_solicitacao") @db.Timestamptz
+  aprovadorId      String?   @map("aprovador_id") @db.Uuid
+  dataDecisao      DateTime? @map("data_decisao") @db.Timestamptz
+
+  // Relacionamentos
+  caixaDiario CaixaDiario? @relation(fields: [caixaDiarioId], references: [id])
+  solicitante Usuario?     @relation("MovimentacaoSolicitante", fields: [solicitanteId], references: [id])
+  aprovador   Usuario?     @relation("MovimentacaoAprovador", fields: [aprovadorId], references: [id])
+
+  @@map("movimentacoes_caixa")
+}
+
+// Tabela para Solicitações de Correção
+model SolicitacaoCorrecao {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  caixaDiarioId    String?   @map("caixa_diario_id") @db.Uuid
+  campoCorrigir    String    @map("campo_corrigir") @db.VarChar(100)
+  valorAntigo      Decimal?  @map("valor_antigo") @db.Decimal(10, 2)
+  valorNovo        Decimal?  @map("valor_novo") @db.Decimal(10, 2)
+  motivo           String    @db.Text
+  status           String    @db.VarChar(20) // 'pendente', 'aprovado', 'reprovado'
+  solicitanteId    String?   @map("solicitante_id") @db.Uuid
+  dataSolicitacao  DateTime? @map("data_solicitacao") @db.Timestamptz
+  aprovadorId      String?   @map("aprovador_id") @db.Uuid
+  dataDecisao      DateTime? @map("data_decisao") @db.Timestamptz
+
+  // Relacionamentos
+  caixaDiario CaixaDiario? @relation(fields: [caixaDiarioId], references: [id])
+  solicitante Usuario?     @relation("CorrecaoSolicitante", fields: [solicitanteId], references: [id])
+  aprovador   Usuario?     @relation("CorrecaoAprovador", fields: [aprovadorId], references: [id])
+
+  @@map("solicitacoes_correcao")
+}

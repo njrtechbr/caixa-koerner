@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, DollarSign, Smartphone, CreditCard, Users, Archive, Lock } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   AlertDialog,
@@ -25,13 +26,23 @@ import {
 } from "@/components/ui/alert-dialog"
 
 const paymentTypeSchema = z.object({
-  tipo_pagamento: z.string(),
+  id: z.string().optional(),
+  nome: z.string(),
   valor: z.preprocess(
-    (val) => val === "" ? undefined : parseFloat(String(val).replace(",", ".")),
+    (val) => {
+      if (typeof val === 'string') {
+        // parseFloat will return NaN for empty or non-numeric strings.
+        // z.number() will then catch this NaN as an invalid_type_error.
+        return parseFloat(val.replace(",", "."));
+      }
+      // Pass through numbers, undefined, null for z.number() to validate.
+      // For an optional field, undefined/null will be accepted.
+      return val;
+    },
     z.number({invalid_type_error: "Valor inválido"}).nonnegative({ message: "Valor não pode ser negativo." }).optional()
   ),
-  icon: z.any().optional(), // For UI only
-  blocked: z.boolean().default(false).optional()
+  isNew: z.boolean().optional(),
+  isDeleted: z.boolean().optional(),
 });
 
 const FecharCaixaSchema = z.object({
@@ -40,7 +51,7 @@ const FecharCaixaSchema = z.object({
     (val) => val === "" ? undefined : parseFloat(String(val).replace(",", ".")),
     z.number({invalid_type_error: "Valor inválido"}).nonnegative({ message: "Valor não pode ser negativo." }).optional()
   ),
-  mfaCode: z.string().length(6, { message: "Código MFA é obrigatório e deve ter 6 dígitos." }),
+  mfaCode: z.string().optional(), // Made optional since MFA is disabled
 });
 
 type FecharCaixaFormValues = z.infer<typeof FecharCaixaSchema>;
@@ -72,27 +83,77 @@ export default function FecharCaixaPage() {
     control: form.control,
     name: "transacoes",
   });
-
-  const handleBlur = (index: number, value: number | undefined) => {
-    if (value !== undefined && value >= 0) {
+  const handleBlur = (index: number, value: string) => {
+    const numericValue = value === '' ? undefined : parseFloat(value);
+    if (numericValue !== undefined && !isNaN(numericValue) && numericValue >= 0) {
       const currentField = fields[index];
       update(index, { ...currentField, blocked: true });
     }
   };
-
   async function onSubmit(data: FecharCaixaFormValues) {
     setIsLoading(true);
-    console.log("Fechando caixa com os seguintes dados:", data);
     
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      // Get current open caixa first
+      const caixaResponse = await fetch('/api/caixa/listar?status=aberto')
+      const caixaData = await caixaResponse.json()
+      
+      if (!caixaResponse.ok || !caixaData.caixas || caixaData.caixas.length === 0) {
+        toast({
+          title: "Erro",
+          description: "Nenhum caixa aberto encontrado",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    toast({
-      title: "Caixa Fechado com Sucesso!",
-      description: `Seu caixa foi fechado e enviado para conferência.`,
-    });
-    setIsLoading(false);
-    router.push("/operador-caixa"); 
+      const caixaId = caixaData.caixas[0].id;
+
+      // Prepare transaction data
+      const transacoes = data.transacoes
+        .filter(t => t.valor !== undefined && t.valor > 0)
+        .map(t => ({
+          tipoPagamento: t.tipo_pagamento,
+          valor: t.valor!
+        }));
+
+      const response = await fetch('/api/caixa/fechar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          caixaId,
+          transacoes,
+          valorSistemaW6: data.valor_sistema_w6,
+          mfaCode: data.mfaCode
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: "Caixa Fechado com Sucesso!",
+          description: "Seu caixa foi fechado e enviado para conferência.",
+        });
+        router.push("/operador-caixa");
+      } else {
+        toast({
+          title: "Erro ao Fechar Caixa",
+          description: result.erro || "Erro interno do servidor",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Erro de Conexão",
+        description: "Não foi possível conectar ao servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }
   
   const totalDeclarado = fields.reduce((sum, field) => sum + (field.valor || 0), 0) + (form.watch("valor_sistema_w6") || 0);
@@ -125,16 +186,24 @@ export default function FecharCaixaPage() {
                         <FormLabel className="flex items-center">
                           <Icon className="mr-2 h-5 w-5 text-muted-foreground" />
                           {item.tipo_pagamento} (R$)
-                        </FormLabel>
-                        <FormControl>
+                        </FormLabel>                        <FormControl>
                           <Input
                             type="number"
                             step="0.01"
                             placeholder="0,00"
-                            {...field}
                             value={field.value === undefined ? '' : String(field.value)}
-                            onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))}
-                            onBlur={() => handleBlur(index, field.value)}
+                            onChange={e => {
+                              const inputValue = e.target.value;
+                              if (inputValue === '') {
+                                field.onChange(undefined);
+                              } else {
+                                const numericValue = parseFloat(inputValue);
+                                if (!isNaN(numericValue)) {
+                                  field.onChange(numericValue);
+                                }
+                              }
+                            }}
+                            onBlur={(e) => handleBlur(index, e.target.value)}
                             readOnly={item.blocked}
                             className={item.blocked ? "bg-muted/50 cursor-not-allowed" : ""}
                           />
@@ -150,41 +219,48 @@ export default function FecharCaixaPage() {
                 name="valor_sistema_w6"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Valor Sistema W6 (R$)</FormLabel>
-                    <FormControl>
+                    <FormLabel>Valor Sistema W6 (R$)</FormLabel>                    <FormControl>
                       <Input 
                         type="number" 
                         step="0.01" 
                         placeholder="0,00" 
-                        {...field} 
                         value={field.value === undefined ? '' : String(field.value)}
-                        onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                        onChange={e => {
+                          const inputValue = e.target.value;
+                          if (inputValue === '') {
+                            field.onChange(undefined);
+                          } else {
+                            const numericValue = parseFloat(inputValue);
+                            if (!isNaN(numericValue)) {
+                              field.onChange(numericValue);
+                            }
+                          }
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
-              />
-              <div className="pt-4 border-t">
+              />              <div className="pt-4 border-t">
                 <p className="text-lg font-semibold">Total Declarado: R$ {totalDeclarado.toFixed(2)}</p>
               </div>
+              <FormField
+                control={form.control}
+                name="mfaCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Código MFA para Selar</FormLabel>
+                    <FormControl>
+                      <Input type="text" placeholder="123456" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </form>
           </Form>
         </CardContent>
         <CardFooter className="flex-col items-stretch space-y-4">
-           <FormField
-              control={form.control}
-              name="mfaCode"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Código MFA para Selar</FormLabel>
-                  <FormControl>
-                    <Input type="text" placeholder="123456" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button className="w-full" disabled={isLoading}>

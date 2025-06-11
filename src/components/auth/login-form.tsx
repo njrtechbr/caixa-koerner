@@ -55,21 +55,9 @@ export function LoginForm() {
           title: "Erro de Login",
           description: "Email ou senha inválidos. Por favor, tente novamente.",
           variant: "destructive",
-        });
-      } else if (result?.ok) {
-        // Check if MFA is enabled and redirect accordingly
-        // This is a simplified check. In a real app, you'd get this from the user object returned by signIn or session.
-        const userResponse = await fetch('/api/auth/session'); // Mock fetching user data
-        const session = await userResponse.json();
-
-        if (session?.user?.mfaEnabled === false) { // For admin@example.com in mock
-          router.push("/mfa-setup");
-        } else if (session?.user?.mfaEnabled === true) {
-          router.push("/mfa-verify"); 
-        }
-         else {
-          router.push("/dashboard"); // Fallback or for users already past MFA steps
-        }
+        });      } else if (result?.ok) {
+        // MFA disabled for testing - go directly to dashboard
+        router.push("/dashboard");
       }
     } catch (error) {
       toast({

@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, Settings, UserCircle, ShieldCheck } from "lucide-react";
+import { LogOut, Settings, UserCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -64,22 +64,13 @@ export function UserNav() {
             </p>
           </div>
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
+        <DropdownMenuSeparator />        <DropdownMenuGroup>
           <DropdownMenuItem asChild>
             <Link href="/perfil"> {/* Placeholder link */}
               <UserCircle className="mr-2 h-4 w-4" />
               <span>Perfil</span>
             </Link>
           </DropdownMenuItem>
-          {(session.user as any).mfaEnabled === false && (
-            <DropdownMenuItem asChild>
-               <Link href="/mfa-setup">
-                <ShieldCheck className="mr-2 h-4 w-4" />
-                <span>Ativar MFA</span>
-              </Link>
-            </DropdownMenuItem>
-          )}
           <DropdownMenuItem asChild>
             <Link href="/configuracoes"> {/* Placeholder link */}
               <Settings className="mr-2 h-4 w-4" />

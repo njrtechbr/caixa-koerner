@@ -8,26 +8,11 @@ import { Loader2 } from "lucide-react";
 export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-
   useEffect(() => {
     if (status === "loading") return; // Do nothing while loading
     if (session) {
-      // User is authenticated
-      const user = session.user as any; // Cast to access custom properties
-      if (user.mfaEnabled === false && user.role === 'admin') { // Example: admin needs to set up MFA
-        router.replace("/mfa-setup");
-      } else if (user.mfaEnabled === true && !user.mfaVerifiedThisSession) { // Needs MFA verification
-         // This mfaVerifiedThisSession logic would be more complex, potentially managed via JWT or session state
-         // For now, if MFA is enabled, we assume they need to verify if not directly from login.
-         // A better flow is: login -> mfa-verify (if enabled) -> dashboard
-         // So, if they land here and MFA is enabled but not verified, redirect.
-         // This scenario is less likely if middleware handles /mfa-verify redirection properly after login.
-         // Typically, /dashboard would be protected and force /mfa-verify if needed.
-        router.replace("/dashboard"); // Or mfa-verify if not already handled
-      }
-      else {
-        router.replace("/dashboard");
-      }
+      // User is authenticated - MFA disabled for testing
+      router.replace("/dashboard");
     } else {
       // User is not authenticated
       router.replace("/login");

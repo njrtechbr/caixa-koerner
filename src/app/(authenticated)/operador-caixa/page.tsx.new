@@ -1,0 +1,247 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "@/hooks/use-toast";
+import AbrirCaixaDialog from "./components/abrir-caixa-dialog";
+import FecharCaixaDialog from "./components/fechar-caixa-dialog";
+import DetalhesCaixaAberto from "./components/detalhes-caixa-aberto";
+import { PlusCircle } from "lucide-react";
+
+// Interface para o usuário simplificada, conforme retornado pela API
+interface UsuarioSimples {
+  id: string;
+  nome: string;
+  email: string;
+}
+
+// Interface para TransacaoFechamento, conforme retornado pela API
+interface TransacaoFechamentoDetalhada {
+  id: string;
+  caixa_diario_id: string;
+  tipo_pagamento: string;
+  valor: string | null; // Convertido para string
+}
+
+// Interface para MovimentacaoCaixa, conforme retornado pela API
+interface MovimentacaoCaixaDetalhada {
+  id: string;
+  caixa_diario_id: string | null;
+  tipo: string;
+  valor: string | null; // Convertido para string
+  descricao: string | null;
+  status: string;
+  solicitante_id: string | null;
+  data_solicitacao: string | null; // Convertido para string (ISO date)
+  aprovador_id: string | null;
+  data_decisao: string | null; // Convertido para string (ISO date)
+}
+
+// Interface para CaixaDiarioDetalhado, alinhada com a resposta da API formatada
+interface CaixaDiarioDetalhado {
+  id: string;
+  data_movimento: string | null; // Convertido para string (ISO date)
+  valor_inicial: string | null;  // Convertido para string
+  status: string;
+  aberto_por_usuario_id: string | null;
+  data_abertura: string | null; // Convertido para string (ISO date)
+  fechado_por_usuario_id: string | null;
+  data_fechamento: string | null; // Convertido para string (ISO date)
+  revisado_por_usuario_id: string | null;
+  data_revisao: string | null;    // Convertido para string (ISO date)
+  motivo_rejeicao: string | null;
+  valor_sistema_w6?: string | null; // Exemplo, adicione outros campos W se necessário
+
+  aberto_por: UsuarioSimples | null;
+  fechado_por?: UsuarioSimples | null;
+  revisado_por?: UsuarioSimples | null;
+  
+  transacoes: TransacaoFechamentoDetalhada[];
+  movimentacoes: MovimentacaoCaixaDetalhada[];
+  
+  valor_total_fechamento?: string; // Convertido para string
+  [key: string]: any; // Permite outros campos que possam ter sido adicionados
+}
+
+export default function OperadorCaixaPage() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [caixaAtual, setCaixaAtual] = useState<CaixaDiarioDetalhado | null>(null);
+  const [temCaixaAberto, setTemCaixaAberto] = useState(false);
+  const [isAbrirCaixaDialogOpen, setIsAbrirCaixaDialogOpen] = useState(false);
+  const [isFecharCaixaDialogOpen, setIsFecharCaixaDialogOpen] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
+  
+  const fetchCaixaAberto = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/caixa/listar?status=aberto');
+      const data = await response.json();
+
+      // Safe client-side logging for debugging (React doesn't render this)
+      console.log('API Response:', data);
+      
+      if (data.sucesso && data.caixas && data.caixas.length > 0) {
+        const caixaData = data.caixas[0];
+        console.log('Found open caixa:', caixaData);
+        
+        // Ensure the caixa data has the expected structure with both legacy and new field names
+        const formattedCaixa = {
+          ...caixaData,
+          // Add fields with both naming conventions to ensure component compatibility
+          data_movimento: caixaData.data_movimento,
+          dataMovimento: caixaData.data_movimento,
+          
+          valor_inicial: caixaData.valor_inicial,
+          valorInicial: caixaData.valor_inicial,
+          
+          data_abertura: caixaData.data_abertura,
+          dataAbertura: caixaData.data_abertura,
+          
+          aberto_por_usuario_id: caixaData.aberto_por_usuario_id,
+          abertoPorUsuarioId: caixaData.aberto_por_usuario_id,
+          
+          // Make sure aberto_por is available for component consumption
+          aberto_por: caixaData.aberto_por || null,
+          abertoPorUsuario: caixaData.aberto_por,
+          
+          // Make sure transacoes is available and is an array
+          transacoes: caixaData.transacoes || [],
+          transacoesFechamento: caixaData.transacoes,
+          
+          // Make sure movimentacoes is available and is an array  
+          movimentacoes: caixaData.movimentacoes || [],
+          movimentacoesCaixa: caixaData.movimentacoes
+        };
+        
+        console.log('Formatted caixa for component:', formattedCaixa);
+        setCaixaAtual(formattedCaixa);
+        setTemCaixaAberto(true);
+      } else {
+        console.log('No open caixa found');
+        setCaixaAtual(null);
+        setTemCaixaAberto(false);
+        if (!data.sucesso && data.mensagem) { // Exibir mensagem de erro da API se houver
+          toast({
+            title: "Erro ao buscar caixa",
+            description: data.mensagem,
+            variant: "destructive",
+          });
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Erro de Rede",
+        description: "Não foi possível conectar ao servidor para verificar o caixa.",
+        variant: "destructive",
+      });
+      setCaixaAtual(null);
+      setTemCaixaAberto(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCaixaAberto();
+  }, []);
+
+  const handleCaixaAberto = (novoCaixa: CaixaDiarioDetalhado) => {
+    setCaixaAtual(novoCaixa);
+    setTemCaixaAberto(true);
+    setIsAbrirCaixaDialogOpen(false);
+    toast({
+      title: "Sucesso!",
+      description: "Caixa aberto com sucesso.",
+    });
+  };
+
+  const handleCaixaFechado = () => {
+    setCaixaAtual(null);
+    setTemCaixaAberto(false);
+    setIsFecharCaixaDialogOpen(false);
+    fetchCaixaAberto(); 
+    toast({
+      title: "Sucesso!",
+      description: "Caixa fechado e enviado para conferência.",
+    });
+  };
+
+  const toggleDebugMode = () => {
+    setDebugMode(!debugMode);
+  };
+
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-screen">Carregando informações do caixa...</div>;
+  }
+
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-6">Gestão de Caixa do Operador</h1>
+      
+      {/* Debug button visible only in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <button 
+          onClick={toggleDebugMode}
+          className="mb-2 text-xs text-blue-600 hover:text-blue-800"
+        >
+          {debugMode ? 'Ocultar Debug' : 'Mostrar Debug'}
+        </button>
+      )}
+      
+      {/* Debug panel - only in development and when debug mode is active */}
+      {process.env.NODE_ENV === 'development' && debugMode && caixaAtual && (
+        <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+          <h3 className="text-sm font-medium">Debug Info (apenas desenvolvimento)</h3>
+          <details open>
+            <summary className="cursor-pointer text-xs">Dados do Caixa</summary>
+            <pre className="mt-2 text-xs overflow-auto max-h-64">
+              {JSON.stringify(caixaAtual, null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
+      
+      {/* We need to check if caixaAtual has the required structure */}
+      {temCaixaAberto && caixaAtual ? (
+        <DetalhesCaixaAberto 
+          caixa={caixaAtual} 
+          onFecharCaixa={() => setIsFecharCaixaDialogOpen(true)} 
+        />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Nenhum Caixa Aberto</CardTitle>
+            <CardDescription>
+              Você não possui nenhum caixa aberto no momento. Para iniciar suas operações, por favor, abra um novo caixa.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p>Clique no botão abaixo para abrir um novo caixa e registrar suas transações do dia.</p>
+          </CardContent>
+          <CardFooter>
+            <Button onClick={() => setIsAbrirCaixaDialogOpen(true)} className="flex items-center gap-2">
+              <PlusCircle size={18} />
+              Abrir Novo Caixa
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+
+      <AbrirCaixaDialog
+        isOpen={isAbrirCaixaDialogOpen}
+        onClose={() => setIsAbrirCaixaDialogOpen(false)}
+        onCaixaAberto={handleCaixaAberto}
+      />
+
+      {caixaAtual && (
+        <FecharCaixaDialog
+          isOpen={isFecharCaixaDialogOpen}
+          onClose={() => setIsFecharCaixaDialogOpen(false)}
+          caixaParaFechar={caixaAtual}
+          onCaixaFechado={handleCaixaFechado}
+        />
+      )}
+    </div>
+  );
+}

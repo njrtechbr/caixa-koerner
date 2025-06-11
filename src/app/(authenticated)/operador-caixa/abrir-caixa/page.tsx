@@ -3,50 +3,154 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { AbrirCaixaSchema } from "@/lib/schemas"; // Assuming this schema exists
+import { useCaixa } from "@/hooks/use-database";
+import { AbrirCaixaSchema } from "@/lib/schemas";
 import { Loader2, DollarSign } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Info } from "lucide-react";
 
 type AbrirCaixaFormValues = z.infer<typeof AbrirCaixaSchema>;
 
-// Mock previous day's closing balance
-const saldoAnterior = 150.75; 
+// Mock previous day's closing balance - This might be removed or fetched if a caixa is already open
+// const saldoAnterior = 150.75; 
+
+interface CaixaAbertoInfo {
+  id: string;
+  dataHoraAbertura: Date;
+  valorInicial: number;
+}
 
 export default function AbrirCaixaPage() {
   const { toast } = useToast();
   const router = useRouter();
+  const { abrirCaixa, listarCaixas, loading: caixaLoading, error: caixaError } = useCaixa();
   const [isLoading, setIsLoading] = useState(false);
-  const [mfaCode, setMfaCode] = useState(""); // For MFA step, if needed before opening
-
+  const [caixaAbertoDetalhes, setCaixaAbertoDetalhes] = useState<CaixaAbertoInfo | null>(null);
+  const [isCheckingInitialStatus, setIsCheckingInitialStatus] = useState(true);
   const form = useForm<AbrirCaixaFormValues>({
     resolver: zodResolver(AbrirCaixaSchema),
     defaultValues: {
-      valor_inicial: saldoAnterior, // Pre-fill with previous day's closing balance
-    },
+      valorInicial: undefined,
+      mfaCode: ""
+    }
   });
+  // Effect to check initial caixa status and set form defaults
+  useEffect(() => {
+    const checkInitialCaixaStatus = async () => {
+      setIsCheckingInitialStatus(true);
+      
+      try {
+        // Check if user has an open caixa
+        const response = await fetch('/api/caixa/listar?status=aberto')
+        const data = await response.json()
+        
+        if (response.ok && data.caixas && data.caixas.length > 0) {
+          // User has an open caixa
+          const caixaAberto = data.caixas[0]
+          const existingCaixa: CaixaAbertoInfo = {
+            id: caixaAberto.id,
+            dataHoraAbertura: new Date(caixaAberto.dataHoraAbertura),
+            valorInicial: caixaAberto.valorInicial,
+          };
+          setCaixaAbertoDetalhes(existingCaixa);
+          form.reset({ valorInicial: existingCaixa.valorInicial, mfaCode: "" });
+        } else {          // No open caixa, set default value
+          setCaixaAbertoDetalhes(null);
+          const saldoAnteriorMock = 150.75; // This should come from last day's closing
+          form.reset({ valorInicial: saldoAnteriorMock, mfaCode: "" });
+        }
+      } catch (error) {
+        console.error('Erro ao verificar status do caixa:', error)
+        toast({
+          title: "Erro",
+          description: "Não foi possível verificar o status do caixa",
+          variant: "destructive",
+        });        // Set default values on error
+        setCaixaAbertoDetalhes(null);
+        form.reset({ valorInicial: 150.75, mfaCode: "" });
+      } finally {
+        setIsCheckingInitialStatus(false);
+      }
+    };
 
+    checkInitialCaixaStatus();
+  }, [form, toast]);
   async function onSubmit(data: AbrirCaixaFormValues) {
-    setIsLoading(true);
-    // Here, you would typically show an MFA input dialog/modal
-    // For simplicity, we'll assume MFA is handled or skip for this demo form
-    console.log("Abrindo caixa com os seguintes dados:", data);
-    
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    if (caixaAbertoDetalhes) {
+      toast({
+        title: "Operação Não Permitida",
+        description: "Você já possui um caixa aberto. Feche-o antes de abrir um novo.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    toast({
-      title: "Caixa Aberto com Sucesso!",
-      description: `Caixa aberto em ${new Date().toLocaleDateString('pt-BR')} com valor inicial de R$ ${data.valor_inicial.toFixed(2)}.`,
-    });
-    setIsLoading(false);
-    router.push("/operador-caixa"); // Redirect to operator's dashboard
+    setIsLoading(true);
+
+    try {      const response = await fetch('/api/caixa/abrir', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          valorInicial: data.valorInicial,
+          mfaCode: data.mfaCode
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        const newCaixaInfo: CaixaAbertoInfo = {
+          id: result.caixa.id,
+          dataHoraAbertura: new Date(result.caixa.dataHoraAbertura),
+          valorInicial: result.caixa.valorInicial,
+        };
+        setCaixaAbertoDetalhes(newCaixaInfo);
+
+        toast({
+          title: "Caixa Aberto com Sucesso!",
+          description: `Caixa ID: ${result.caixa.id} aberto com valor inicial de R$ ${result.caixa.valorInicial.toFixed(2)}.`,
+        });
+      } else {
+        toast({
+          title: "Erro ao Abrir Caixa",
+          description: result.erro || "Erro interno do servidor",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Erro de Conexão",
+        description: "Não foi possível conectar ao servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  if (isCheckingInitialStatus) {
+    return (
+      <div>
+        <PageHeader
+          title="Abrir Novo Caixa"
+          description="Inicie o movimento diário do seu caixa."
+        />
+        <div className="flex flex-col items-center justify-center py-10">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">Verificando status do caixa...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -55,58 +159,107 @@ export default function AbrirCaixaPage() {
         title="Abrir Novo Caixa"
         description="Inicie o movimento diário do seu caixa."
       />
+      {caixaAbertoDetalhes && (
+        <Alert variant="default" className="mb-6 max-w-lg mx-auto bg-blue-50 border-blue-200">
+          <Info className="h-5 w-5 text-blue-700" />
+          <AlertTitle className="text-blue-800">Caixa Aberto</AlertTitle>
+          <AlertDescription className="text-blue-700">
+            Você já possui um caixa aberto (ID: <strong>{caixaAbertoDetalhes.id}</strong>).
+            <br />
+            Aberto em: {caixaAbertoDetalhes.dataHoraAbertura.toLocaleString('pt-BR')} 
+            <br />
+            Valor Inicial: R$ {caixaAbertoDetalhes.valorInicial.toFixed(2)}
+            <br />
+            Para abrir um novo caixa, você precisa fechar o atual primeiro.
+          </AlertDescription>
+        </Alert>
+      )}
       <Card className="max-w-lg mx-auto">
         <CardHeader>
           <CardTitle>Detalhes da Abertura</CardTitle>
           <CardDescription>
-            Confirme o valor inicial para a abertura do caixa. Este valor é o saldo final do caixa anterior.
+            {caixaAbertoDetalhes 
+              ? "Um caixa já está aberto. Feche-o para abrir um novo."
+              : "Confirme o valor inicial para a abertura do caixa. Este valor é geralmente o saldo final do caixa anterior."
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="valor_inicial"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Valor Inicial (R$)</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <Input 
-                          type="number" 
-                          step="0.01" 
-                          placeholder="0,00" 
-                          {...field} 
-                          className="pl-10"
-                          value={field.value === undefined ? '' : String(field.value)} // Ensure controlled component
-                          onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))}
+              <fieldset disabled={!!caixaAbertoDetalhes}> {/* Disables inputs if caixa is already open */}                <FormField
+                  control={form.control}
+                  name="valorInicial"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Valor Inicial (R$)</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                          <Input 
+                            type="number" 
+                            step="0.01" 
+                            placeholder="0,00" 
+                            className="pl-10"
+                            // value and onChange are handled by react-hook-form Controller (via field)
+                            // Ensure field.value is correctly formatted if needed, but RHF handles it well for type="number"
+                            {...field} // Spread field props here
+                            onChange={e => { // Keep custom onChange for parsing if necessary
+                              const inputValue = e.target.value;
+                              if (inputValue === '') {
+                                field.onChange(undefined); 
+                              } else {
+                                // RHF with Zod handles parsing for type number, 
+                                // but explicit parsing can be kept if specific behavior is needed before validation
+                                const numericValue = parseFloat(inputValue.replace(",", "."));
+                                if (!isNaN(numericValue)) {
+                                  field.onChange(numericValue);
+                                } else {
+                                  field.onChange(inputValue); // Let Zod catch it if it's not a valid number string for preprocess
+                                }
+                              }
+                            }}
+                            value={field.value === undefined || field.value === null ? '' : String(field.value)} // Control value display
+                          />
+                        </div>
+                      </FormControl>
+                      <FormDescription>
+                        Este valor deve corresponder ao saldo final do caixa do dia anterior.
+                      </FormDescription>                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="mfaCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Código MFA</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="text"
+                          placeholder="000000"
+                          maxLength={6}
+                          className="text-center text-lg tracking-widest"
+                          {...field}
                         />
-                      </div>
-                    </FormControl>
-                    <FormDescription>
-                      Este valor deve corresponder ao saldo final do caixa do dia anterior.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              {/* 
-                In a real scenario, an MFA input would be required here,
-                possibly in a dialog triggered before submission.
-                Example:
-                <FormItem>
-                  <FormLabel>Código MFA</FormLabel>
-                  <FormControl>
-                    <Input type="text" placeholder="123456" value={mfaCode} onChange={(e) => setMfaCode(e.target.value)} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              */}
-              <Button type="submit" className="w-full" disabled={isLoading}>
+                      </FormControl>
+                      <FormDescription>
+                        Digite o código de 6 dígitos do seu aplicativo autenticador.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </fieldset>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isLoading || !!caixaAbertoDetalhes} // isLoading for submission, !!caixaAbertoDetalhes if already open
+              >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Abrir Caixa
+                {caixaAbertoDetalhes ? "Caixa já Aberto" : "Abrir Caixa"}
               </Button>
             </form>
           </Form>
