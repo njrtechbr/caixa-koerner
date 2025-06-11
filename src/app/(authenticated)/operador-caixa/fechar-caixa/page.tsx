@@ -43,6 +43,8 @@ const paymentTypeSchema = z.object({
   ),
   isNew: z.boolean().optional(),
   isDeleted: z.boolean().optional(),
+  icon: z.custom<LucideIcon>().optional(), // Added icon
+  blocked: z.boolean().optional(), // Added blocked
 });
 
 const FecharCaixaSchema = z.object({
@@ -73,7 +75,7 @@ export default function FecharCaixaPage() {
   const form = useForm<FecharCaixaFormValues>({
     resolver: zodResolver(FecharCaixaSchema),
     defaultValues: {
-      transacoes: paymentTypes.map(pt => ({ tipo_pagamento: pt.nome, valor: undefined, icon: pt.icon, blocked: false })),
+      transacoes: paymentTypes.map(pt => ({ nome: pt.nome, valor: undefined, icon: pt.icon, blocked: false })), // Changed tipo_pagamento to nome
       valor_sistema_w6: undefined,
       mfaCode: "",
     },
@@ -113,7 +115,7 @@ export default function FecharCaixaPage() {
       const transacoes = data.transacoes
         .filter(t => t.valor !== undefined && t.valor > 0)
         .map(t => ({
-          tipoPagamento: t.tipo_pagamento,
+          tipoPagamento: t.nome, // Changed t.tipo_pagamento to t.nome
           valor: t.valor!
         }));
 
@@ -185,7 +187,7 @@ export default function FecharCaixaPage() {
                       <FormItem>
                         <FormLabel className="flex items-center">
                           <Icon className="mr-2 h-5 w-5 text-muted-foreground" />
-                          {item.tipo_pagamento} (R$)
+                          {item.nome} (R$)
                         </FormLabel>                        <FormControl>
                           <Input
                             type="number"
