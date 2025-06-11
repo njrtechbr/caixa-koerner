@@ -71,7 +71,7 @@ export function MfaSetupForm() {
     };
 
     setupMFA();
-  }, []);
+  }, [toast]);
 
   const form = useForm<MfaSetupFormValues>({
     resolver: zodResolver(mfaSetupSchema),
