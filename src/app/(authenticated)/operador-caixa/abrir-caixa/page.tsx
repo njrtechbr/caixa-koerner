@@ -25,7 +25,18 @@ type AbrirCaixaFormValues = z.infer<typeof AbrirCaixaSchema>;
 interface CaixaAbertoInfo {
   id: string;
   dataHoraAbertura: Date;
-  valorInicial: number;
+  valorInicial: number | string;
+}
+
+// Função auxiliar para formatar valores monetários com segurança
+const formatarMoeda = (valor: number | string | null | undefined): string => {
+  if (valor === null || valor === undefined) return "0,00";
+  
+  const numero = typeof valor === 'number' ? valor : parseFloat(String(valor).replace(',', '.'));
+  
+  if (isNaN(numero)) return "0,00";
+  
+  return numero.toFixed(2).replace('.', ',');
 }
 
 export default function AbrirCaixaPage() {
@@ -47,21 +58,41 @@ export default function AbrirCaixaPage() {
     const checkInitialCaixaStatus = async () => {
       setIsCheckingInitialStatus(true);
       
-      try {
-        // Check if user has an open caixa
+      try {        // Check if user has an open caixa
         const response = await fetch('/api/caixa/listar?status=aberto')
         const data = await response.json()
         
         if (response.ok && data.caixas && data.caixas.length > 0) {
           // User has an open caixa
-          const caixaAberto = data.caixas[0]
+          const caixaAberto = data.caixas[0];
+          
+          // Tentar converter o valor inicial para número
+          let valorInicialNumerico;
+          try {
+            valorInicialNumerico = typeof caixaAberto.valorInicial === 'number'
+              ? caixaAberto.valorInicial
+              : parseFloat(String(caixaAberto.valorInicial).replace(',', '.'));
+            
+            if (isNaN(valorInicialNumerico)) {
+              throw new Error('Valor inválido');
+            }
+          } catch (error) {
+            console.warn("Erro ao converter valor inicial:", error);
+            valorInicialNumerico = 0; // valor padrão seguro
+          }
+          
           const existingCaixa: CaixaAbertoInfo = {
             id: caixaAberto.id,
             dataHoraAbertura: new Date(caixaAberto.dataHoraAbertura),
-            valorInicial: caixaAberto.valorInicial,
+            valorInicial: valorInicialNumerico,
           };
           setCaixaAbertoDetalhes(existingCaixa);
-          form.reset({ valorInicial: existingCaixa.valorInicial, mfaCode: "" });
+          form.reset({ 
+            valorInicial: typeof existingCaixa.valorInicial === 'number' 
+                        ? existingCaixa.valorInicial 
+                        : parseFloat(String(existingCaixa.valorInicial).replace(',', '.')), 
+            mfaCode: "" 
+          });
         } else {          // No open caixa, set default value
           setCaixaAbertoDetalhes(null);
           const saldoAnteriorMock = 150.75; // This should come from last day's closing
@@ -106,19 +137,31 @@ export default function AbrirCaixaPage() {
         }),
       })
 
-      const result = await response.json()
-
-      if (response.ok) {
-        const newCaixaInfo: CaixaAbertoInfo = {
+      const result = await response.json();
+      if (response.ok) {        
+        // Tentar converter o valor inicial para número
+        let valorInicialNumerico;
+        try {
+          valorInicialNumerico = typeof result.caixa.valorInicial === 'number'
+            ? result.caixa.valorInicial
+            : parseFloat(String(result.caixa.valorInicial).replace(',', '.'));
+          
+          if (isNaN(valorInicialNumerico)) {
+            throw new Error('Valor inválido');
+          }
+        } catch (error) {
+          console.warn("Erro ao converter valor inicial:", error);
+          valorInicialNumerico = 0; // valor padrão seguro
+        }          const newCaixaInfo: CaixaAbertoInfo = {
           id: result.caixa.id,
           dataHoraAbertura: new Date(result.caixa.dataHoraAbertura),
-          valorInicial: result.caixa.valorInicial,
+          valorInicial: valorInicialNumerico
         };
         setCaixaAbertoDetalhes(newCaixaInfo);
-
+        
         toast({
           title: "Caixa Aberto com Sucesso!",
-          description: `Caixa ID: ${result.caixa.id} aberto com valor inicial de R$ ${result.caixa.valorInicial.toFixed(2)}.`,
+          description: `Caixa ID: ${result.caixa.id} aberto com valor inicial de R$ ${formatarMoeda(result.caixa.valorInicial)}.`,
         });
       } else {
         toast({
@@ -166,9 +209,9 @@ export default function AbrirCaixaPage() {
           <AlertDescription className="text-blue-700">
             Você já possui um caixa aberto (ID: <strong>{caixaAbertoDetalhes.id}</strong>).
             <br />
-            Aberto em: {caixaAbertoDetalhes.dataHoraAbertura.toLocaleString('pt-BR')} 
+            Aberto em: {caixaAbertoDetalhes.dataHoraAbertura.toLocaleString('pt-BR')}
             <br />
-            Valor Inicial: R$ {caixaAbertoDetalhes.valorInicial.toFixed(2)}
+            Valor Inicial: R$ {formatarMoeda(caixaAbertoDetalhes.valorInicial)}
             <br />
             Para abrir um novo caixa, você precisa fechar o atual primeiro.
           </AlertDescription>

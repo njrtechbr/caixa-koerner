@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/database';
+import { getDevBypassSession, isDevelopmentMode } from '@/lib/dev-bypass';
 
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
+  let session = await getServerSession(authOptions);
+  
+  // Bypass de desenvolvimento
+  if (isDevelopmentMode() && !session) {
+    session = getDevBypassSession();
+  }
 
   if (!session?.user?.id) {
     return NextResponse.json({ sucesso: false, mensagem: 'Usuário não autenticado' }, { status: 401 });
@@ -67,10 +73,8 @@ export async function GET(request: NextRequest) {
         valorTotalFechamento = caixa.transacoesFechamento.reduce((total: number, transacao: any) => {
           return total + Number(transacao.valor);
         }, 0);
-      }
-
-      const formatDecimal = (value: any): string | null => 
-        value ? value.toString() : null;
+      }      const formatDecimal = (value: any): number | null => 
+        value ? parseFloat(value.toString()) : null;
       
       const formatDate = (value: Date | null | undefined): string | null =>
         value ? value.toISOString() : null;

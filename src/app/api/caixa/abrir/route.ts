@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma, STATUS_CAIXA, CARGOS } from '@/lib/database'
 import { AbrirCaixaSchema } from '@/lib/schemas'
 import { verifyTOTP } from '@/lib/mfa'
+import { getDevBypassSession, isDevelopmentMode } from '@/lib/dev-bypass'
 
 /**
  * API para abrir caixa diário
@@ -13,7 +14,12 @@ import { verifyTOTP } from '@/lib/mfa'
 export async function POST(request: NextRequest) {
   try {
     // Verificar autenticação
-    const session = await getServerSession(authOptions)
+    let session = await getServerSession(authOptions)
+    
+    // Bypass de desenvolvimento
+    if (isDevelopmentMode() && !session) {
+      session = getDevBypassSession();
+    }
     
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -63,7 +69,7 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       )
     }    // Verificar se o usuário tem MFA habilitado e validar código
-    if (usuario.isMfaEnabled) {
+    if (usuario.isMfaEnabled && !isDevelopmentMode()) {
       if (!usuario.mfaSecret) {
         return NextResponse.json(
           { erro: 'Configuração MFA inválida' },
@@ -82,12 +88,12 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-    } else {
+    } else if (!isDevelopmentMode()) {
       return NextResponse.json(
         { erro: 'MFA é obrigatório para esta operação' },
         { status: 403 }
       )
-    }    const hoje = new Date()
+    }const hoje = new Date()
     hoje.setHours(0, 0, 0, 0)
 
     // Verificar se já existe um caixa aberto para este usuário (independente da data)

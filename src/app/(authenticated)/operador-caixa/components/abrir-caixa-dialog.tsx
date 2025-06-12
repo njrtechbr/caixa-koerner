@@ -26,9 +26,9 @@ export default function AbrirCaixaDialog({ isOpen, onClose, onCaixaAberto }: Abr
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        },        body: JSON.stringify({
           valorInicial: parseFloat(valorInicial) || 0,
+          mfaCode: ""
         }),
       });
 
@@ -94,8 +94,7 @@ export default function AbrirCaixaDialog({ isOpen, onClose, onCaixaAberto }: Abr
             <Button type="submit" disabled={isLoading}>
               {isLoading ? "Abrindo..." : "Abrir Caixa"}
             </Button>
-          </DialogFooter>
-        </form>
+          </DialogFooter>        </form>
       </DialogContent>
     </Dialog>
   );

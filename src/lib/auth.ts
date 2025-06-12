@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from './database'
 import { verifyPassword } from './security'
 import { LoginSchema } from './schemas'
+import { isDevelopmentMode, getDevBypassSession } from './dev-bypass'
 
 /**
  * Configuração de autenticação NextAuth.js para o Sistema de Controle de Caixa.
@@ -108,10 +109,20 @@ export const authOptions: NextAuthOptions = {
       }
       // O token JWT resultante é retornado e armazenado no cookie.
       return token;
-    },
-    // Callback para manipulação do objeto de sessão.
+    },    // Callback para manipulação do objeto de sessão.
     // Chamado sempre que uma sessão é verificada (ex: `useSession`, `getSession`).
     async session({ session, token }) {
+      // Bypass de desenvolvimento - retorna sessão mockada
+      if (isDevelopmentMode() && !session.user?.email) {
+        const devSession = getDevBypassSession();
+        if (devSession) {
+          return {
+            user: devSession.user,
+            expires: devSession.expires
+          };
+        }
+      }
+
       // Adiciona as informações do token (que contém os dados customizados) ao objeto `session.user`.
       // Isso torna os dados customizados (id, cargo, isMfaEnabled) disponíveis no lado do cliente via `useSession`.
       if (session.user && token) {

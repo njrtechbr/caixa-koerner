@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
+import { PlusCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import AbrirCaixaDialog from "./components/abrir-caixa-dialog";
 import FecharCaixaDialog from "./components/fechar-caixa-dialog";
@@ -272,7 +273,8 @@ export default function OperadorCaixaPage() {
                 <p className="text-center text-muted-foreground py-6">
                   Você não possui movimentações pendentes no momento.
                 </p>
-              )}            </CardContent>
+              )}
+            </CardContent>
           </Card>
 
           {/* Diálogos para abrir e fechar caixa */}
@@ -280,9 +282,7 @@ export default function OperadorCaixaPage() {
             isOpen={isAbrirCaixaDialogOpen}
             onClose={() => setIsAbrirCaixaDialogOpen(false)}
             onCaixaAberto={handleCaixaAberto}
-          />
-          
-          {caixaAtual && (
+          />          {caixaAtual && (
             <FecharCaixaDialog
               isOpen={isFecharCaixaDialogOpen}
               onClose={() => setIsFecharCaixaDialogOpen(false)}

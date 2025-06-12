@@ -86,16 +86,39 @@ model CaixaDiario {
   @@map("caixa_diario")
 }
 
-// Tabela para os valores detalhados do fechamento do operador
-model TransacaoFechamento {
-  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  caixaDiarioId   String      @map("caixa_diario_id") @db.Uuid
-  tipoPagamento   String      @map("tipo_pagamento") @db.VarChar(50) // 'Dinheiro', 'Pix', 'Débito', 'Mensalista', 'Outros'
-  valor           Decimal     @db.Decimal(10, 2)
+// Tabela para definir formas de pagamento disponíveis no sistema
+model FormaPagamento {
+  id                String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nome              String                @db.VarChar(100)
+  codigo            String                @unique @db.VarChar(50) // 'dinheiro', 'pix', 'debito', etc.
+  ordem             Int                   @default(0) // Para ordenação na interface
+  ativo             Boolean               @default(true)
+  ehDinheiro        Boolean               @default(false) @map("eh_dinheiro") // Flag especial para dinheiro
+  ehSistemaW6       Boolean               @default(false) @map("eh_sistema_w6") // Flag especial para valor do sistema W6
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relacionamentos
-  caixaDiario CaixaDiario @relation(fields: [caixaDiarioId], references: [id], onDelete: Cascade)
+  transacoesFechamento TransacaoFechamento[]
 
+  @@map("formas_pagamento")
+}
+
+// Tabela para os valores detalhados do fechamento do operador - agora mais flexível
+model TransacaoFechamento {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  caixaDiarioId      String         @map("caixa_diario_id") @db.Uuid
+  formaPagamentoId   String         @map("forma_pagamento_id") @db.Uuid
+  valor              Decimal        @db.Decimal(10, 2)
+  ordemPreenchimento Int?           @map("ordem_preenchimento") // Para rastrear a ordem de preenchimento
+  timestampSalvo     DateTime       @default(now()) @map("timestamp_salvo") @db.Timestamptz
+  
+  // Relacionamentos
+  caixaDiario    CaixaDiario    @relation(fields: [caixaDiarioId], references: [id], onDelete: Cascade)
+  formaPagamento FormaPagamento @relation(fields: [formaPagamentoId], references: [id])
+
+  // Constraint única para evitar duplicatas
+  @@unique([caixaDiarioId, formaPagamentoId])
   @@map("transacoes_fechamento")
 }
 

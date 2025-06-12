@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Settings, ShieldAlert } from "lucide-react";
+import { Users, Settings, ShieldAlert, CreditCard } from "lucide-react";
 import Link from "next/link";
 
 export default function AdminPage() {
@@ -10,8 +10,7 @@ export default function AdminPage() {
       <PageHeader
         title="Painel Administrativo"
         description="Gerencie usuários, configurações e monitoramento do sistema."
-      />
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      />      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg hover:shadow-xl transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Gerenciar Usuários</CardTitle>
@@ -21,6 +20,19 @@ export default function AdminPage() {
             <p className="text-xs text-muted-foreground mb-2">Adicione, edite ou remova usuários e suas funções.</p>
             <Button asChild className="w-full">
               <Link href="/admin/gerenciar-usuarios">Acessar Usuários</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-lg hover:shadow-xl transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Formas de Pagamento</CardTitle>
+            <CreditCard className="h-5 w-5 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-2">Configure as formas de pagamento disponíveis no sistema.</p>
+            <Button asChild className="w-full">
+              <Link href="/admin/formas-pagamento">Gerenciar Formas</Link>
             </Button>
           </CardContent>
         </Card>

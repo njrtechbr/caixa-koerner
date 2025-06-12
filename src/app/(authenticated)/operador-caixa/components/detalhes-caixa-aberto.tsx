@@ -1,0 +1,222 @@
+"use client";
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { CalendarDays, DollarSign, Clock, User } from "lucide-react";
+
+interface CaixaDiarioDetalhado {
+  id: string;
+  data_movimento?: string | null;
+  dataMovimento?: string | null;  // Alternative field name
+  valor_inicial?: string | null;
+  valorInicial?: string | null;   // Alternative field name
+  status: string;
+  data_abertura?: string | null;
+  dataAbertura?: string | null;   // Alternative field name
+  aberto_por_usuario_id?: string | null;
+  abertoPorUsuarioId?: string | null; // Alternative field name
+  aberto_por?: {
+    id: string;
+    nome: string;
+    email: string;
+  } | null;
+  abertoPorUsuario?: {           // Alternative field name
+    id: string;
+    nome: string;
+    email: string;
+  } | null;
+  transacoes?: any[];
+  transacoesFechamento?: any[];  // Alternative field name
+  movimentacoes?: any[];
+  movimentacoesCaixa?: any[];    // Alternative field name
+  valor_total_fechamento?: string;
+}
+
+interface DetalhesCaixaAbertoProps {
+  caixa: CaixaDiarioDetalhado;
+  onFecharCaixa: () => void;
+}
+
+export default function DetalhesCaixaAberto({ caixa, onFecharCaixa }: DetalhesCaixaAbertoProps) {
+  // Safe logging for debugging purposes
+  console.log('DetalhesCaixaAberto received:', caixa);
+  
+  const formatarData = (dataString: string | null | undefined) => {
+    if (!dataString) return 'N/A';
+    try {
+      return new Date(dataString).toLocaleDateString('pt-BR');
+    } catch (error) {
+      console.error('Error formatting date:', dataString, error);
+      return 'Data inválida';
+    }
+  };
+  
+  const formatarDataHora = (dataString: string | null | undefined) => {
+    if (!dataString) return 'N/A';
+    try {
+      return new Date(dataString).toLocaleString('pt-BR');
+    } catch (error) {
+      console.error('Error formatting datetime:', dataString, error);
+      return 'Data/hora inválida';
+    }
+  };
+
+  const formatarValor = (valor: string | null | undefined) => {
+    if (!valor) return 'R$ 0,00';
+    try {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      }).format(parseFloat(valor));
+    } catch (error) {
+      console.error('Error formatting value:', valor, error);
+      return 'R$ 0,00';
+    }
+  };
+
+  // Helper function to get transactions from the appropriate property
+  const getTransacoes = () => {
+    return caixa.transacoes || caixa.transacoesFechamento || [];
+  };
+
+  // Helper function to get movements from the appropriate property
+  const getMovimentacoes = () => {
+    return caixa.movimentacoes || caixa.movimentacoesCaixa || [];
+  };
+
+  // Helper function to get the user name who opened the cash register
+  const getAberturaPor = () => {
+    return caixa.aberto_por?.nome || 
+           caixa.abertoPorUsuario?.nome || 
+           'Usuário não identificado';
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Caixa Aberto
+              </CardTitle>
+              <CardDescription>
+                Caixa ID: {caixa.id}
+              </CardDescription>
+            </div>
+            <Badge variant="default" className="bg-green-500">
+              {caixa.status}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-center space-x-2">
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Data do Movimento</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatarData(caixa.data_movimento || caixa.dataMovimento)}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Aberto em</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatarDataHora(caixa.data_abertura || caixa.dataAbertura)}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Valor Inicial</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatarValor(caixa.valor_inicial || caixa.valorInicial)}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Aberto por</p>
+                <p className="text-sm text-muted-foreground">
+                  {getAberturaPor()}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Transações: {getTransacoes().length || 0} | 
+                  Movimentações: {getMovimentacoes().length || 0}
+                </p>
+              </div>
+              <Button onClick={onFecharCaixa}>
+                Fechar Caixa
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Seção de Transações */}
+      {getTransacoes().length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Transações de Fechamento</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {getTransacoes().map((transacao: any, index: number) => (
+                <div key={transacao.id || index} className="flex justify-between items-center p-2 border rounded">
+                  <span>{transacao.tipo_pagamento || transacao.tipoPagamento}</span>
+                  <span>{formatarValor(transacao.valor)}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Seção de Movimentações */}
+      {getMovimentacoes().length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Movimentações</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {getMovimentacoes().map((movimentacao: any, index: number) => (
+                <div key={movimentacao.id || index} className="flex justify-between items-center p-2 border rounded">
+                  <div>
+                    <span className="font-medium">{movimentacao.tipo}</span>
+                    {movimentacao.descricao && (
+                      <p className="text-sm text-muted-foreground">{movimentacao.descricao}</p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <div>{formatarValor(movimentacao.valor)}</div>
+                    <Badge variant={movimentacao.status === 'aprovado' ? 'default' : 'secondary'}>
+                      {movimentacao.status}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

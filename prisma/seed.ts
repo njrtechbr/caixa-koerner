@@ -120,7 +120,93 @@ async function main() {
     }
   })
 
-  console.log('✅ Seed concluído com sucesso!')
+  console.log('✅ Usuários criados com sucesso!')
+
+  // 3. Inserir formas de pagamento padrão
+  console.log('💳 Inserindo formas de pagamento padrão...')
+  
+  const formasPagamento = [
+    {
+      nome: 'Dinheiro',
+      codigo: 'dinheiro',
+      ordem: 1,
+      ehDinheiro: true,
+      ehSistemaW6: false,
+      ativo: true
+    },
+    {
+      nome: 'PIX',
+      codigo: 'pix',
+      ordem: 2,
+      ehDinheiro: false,
+      ehSistemaW6: false,
+      ativo: true
+    },
+    {
+      nome: 'Cartão de Débito',
+      codigo: 'debito',
+      ordem: 3,
+      ehDinheiro: false,
+      ehSistemaW6: false,
+      ativo: true
+    },
+    {
+      nome: 'Cartão de Crédito',
+      codigo: 'credito',
+      ordem: 4,
+      ehDinheiro: false,
+      ehSistemaW6: false,
+      ativo: true
+    },
+    {
+      nome: 'Mensalista',
+      codigo: 'mensalista',
+      ordem: 5,
+      ehDinheiro: false,
+      ehSistemaW6: false,
+      ativo: true
+    },
+    {
+      nome: 'Cheque',
+      codigo: 'cheque',
+      ordem: 6,
+      ehDinheiro: false,
+      ehSistemaW6: false,
+      ativo: true
+    },
+    {
+      nome: 'Outros',
+      codigo: 'outros',
+      ordem: 7,
+      ehDinheiro: false,
+      ehSistemaW6: false,
+      ativo: true
+    },
+    {
+      nome: 'Sistema W6',
+      codigo: 'sistema_w6',
+      ordem: 99, // Sempre por último
+      ehDinheiro: false,
+      ehSistemaW6: true,
+      ativo: true
+    }
+  ]
+
+  for (const forma of formasPagamento) {
+    await prisma.formaPagamento.upsert({
+      where: { codigo: forma.codigo },
+      update: {
+        nome: forma.nome,
+        ordem: forma.ordem,
+        ehDinheiro: forma.ehDinheiro,
+        ehSistemaW6: forma.ehSistemaW6,
+        ativo: forma.ativo
+      },
+      create: forma
+    })
+  }
+
+  console.log('✅ Formas de pagamento criadas com sucesso!')
   console.log('')
   console.log('📋 Usuários criados:')
   console.log('  🔐 Admin: admin@cartoriokoerner.com.br | Senha: Admin@123456')

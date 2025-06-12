@@ -197,15 +197,31 @@ const navigationGroups: NavGroup[] = [
 
 export function SidebarNav() {
   const pathname = usePathname();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const userRole = (session?.user as any)?.cargo;
+
+  console.log("[DEBUG] SidebarNav renderizando...", { 
+    pathname, 
+    userRole, 
+    session: !!session,
+    status 
+  });
 
   const isActive = (href: string, exact = false) => {
     return exact ? pathname === href : pathname.startsWith(href);
   };
 
   const hasAccess = (roles: string[]) => {
-    return userRole && (roles.includes(userRole) || userRole === 'admin');
+    // Se ainda está carregando a sessão, não mostrar nada
+    if (status === 'loading') return false;
+    
+    // Se não tem sessão, não mostrar nada  
+    if (!session) return false;
+    
+    // Se tem sessão mas não tem role, assumir que vai carregar
+    if (!userRole) return true;
+    
+    return roles.includes(userRole) || userRole === 'admin';
   };
 
   const getBadgeColor = (badge?: string) => {
@@ -218,6 +234,27 @@ export function SidebarNav() {
         return 'bg-blue-500 text-blue-50';
     }
   };
+
+  // Se está carregando, mostrar skeleton
+  if (status === 'loading') {
+    return (
+      <div className="space-y-2 p-2">
+        <div className="h-6 bg-gray-200 rounded animate-pulse"></div>
+        <div className="h-8 bg-gray-200 rounded animate-pulse"></div>
+        <div className="h-8 bg-gray-200 rounded animate-pulse"></div>
+        <div className="h-8 bg-gray-200 rounded animate-pulse"></div>
+      </div>
+    );
+  }
+
+  // Se não tem sessão, não mostrar nada
+  if (!session) {
+    return (
+      <div className="space-y-2 p-2">
+        <p className="text-sm text-muted-foreground">Carregando navegação...</p>
+      </div>
+    );
+  }
   return (
     <div className="space-y-2">
       {navigationGroups
