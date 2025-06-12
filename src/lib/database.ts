@@ -1,159 +1,40 @@
-import { PrismaClient } from '../generated/prisma'
+// AI-NOTE: Módulo de configuração e instanciação do cliente Prisma.
+// Este arquivo é central para a interação da aplicação com o banco de dados.
+// Ele garante que haja uma única instância do PrismaClient, o que é uma prática recomendada
+// para evitar a exaustão de conexões com o banco de dados em ambientes de desenvolvimento com hot-reloading.
 
-/**
- * Instância global do Prisma Client para o Sistema de Controle de Caixa
- * Implementa singleton pattern para evitar múltiplas conexões em desenvolvimento
- */
+import { PrismaClient } from "@prisma/client"; // AI-NOTE: Importa o PrismaClient do pacote @prisma/client.
 
+// AI-NOTE: Declara uma variável global 'prisma' do tipo PrismaClient ou undefined.
+// O uso de 'globalThis' é uma forma de declarar variáveis globais de forma segura em diferentes ambientes JavaScript (Node.js, browser).
+// Isso é específico para o padrão de instanciação única do Prisma em desenvolvimento.
 declare global {
-  // eslint-disable-next-line no-var
-  var prisma: PrismaClient | undefined
+  var prisma: PrismaClient | undefined;
 }
 
-export const prisma = globalThis.prisma || new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-})
+// AI-NOTE: Instancia o PrismaClient.
+// A lógica aqui diferencia entre ambiente de produção e desenvolvimento:
+// - Em produção: cria uma nova instância do PrismaClient diretamente.
+// - Em desenvolvimento: verifica se já existe uma instância em 'globalThis.prisma'.
+//   Se não existir, cria uma nova e a armazena em 'globalThis.prisma'.
+//   Isso previne que o Next.js hot-reloading crie múltiplas instâncias do PrismaClient,
+//   o que poderia levar a avisos de excesso de conexões.
+const prisma = globalThis.prisma || new PrismaClient({
+  // AI-NOTE: Opções de log para o PrismaClient.
+  // Pode ser configurado para logar queries, informações, avisos e erros.
+  // Exemplo: log: ["query", "info", "warn", "error"]
+  // No código atual, está vazio, o que significa que usará os padrões do Prisma (geralmente log de erros).
+  // Para desenvolvimento, logar queries ('query') pode ser muito útil para depuração.
+  log: [],
+});
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.prisma = prisma
+// AI-NOTE: Se estiver em ambiente de desenvolvimento, atribui a instância do PrismaClient à variável global.
+// Isso garante que a mesma instância seja reutilizada nas recargas de módulos (hot-reloading).
+if (process.env.NODE_ENV !== "production") {
+  globalThis.prisma = prisma;
 }
 
-/**
- * Tipos de cargo do sistema
- */
-export const CARGOS = {
-  OPERADOR_CAIXA: 'operador_caixa',
-  SUPERVISOR_CAIXA: 'supervisor_caixa', 
-  SUPERVISOR_CONFERENCIA: 'supervisor_conferencia',
-  ADMIN: 'admin'
-} as const
-
-export type CargoUsuario = typeof CARGOS[keyof typeof CARGOS]
-
-/**
- * Status possíveis do caixa diário
- */
-export const STATUS_CAIXA = {
-  ABERTO: 'Aberto',
-  FECHADO_AGUARDANDO_CONFERENCIA: 'Fechado - Aguardando Conferência',
-  EM_CONFERENCIA: 'Em Conferência',
-  APROVADO: 'Aprovado',
-  REPROVADO: 'Reprovado',
-  CONFERENCIA_FINAL: 'Conferência Final'
-} as const
-
-export type StatusCaixa = typeof STATUS_CAIXA[keyof typeof STATUS_CAIXA]
-
-/**
- * Tipos de pagamento aceitos
- */
-export const TIPOS_PAGAMENTO = {
-  DINHEIRO: 'Dinheiro',
-  PIX: 'Pix',
-  DEBITO: 'Débito',
-  MENSALISTA: 'Mensalista',
-  OUTROS: 'Outros'
-} as const
-
-export type TipoPagamento = typeof TIPOS_PAGAMENTO[keyof typeof TIPOS_PAGAMENTO]
-
-/**
- * Status das movimentações (sangria, entrada, correção)
- */
-export const STATUS_MOVIMENTACAO = {
-  PENDENTE: 'pendente',
-  APROVADO: 'aprovado',
-  REPROVADO: 'reprovado'
-} as const
-
-export type StatusMovimentacao = typeof STATUS_MOVIMENTACAO[keyof typeof STATUS_MOVIMENTACAO]
-
-/**
- * Tipos de movimentação de caixa
- */
-export const TIPOS_MOVIMENTACAO = {
-  ENTRADA: 'entrada',
-  SANGRIA: 'sangria'
-} as const
-
-export type TipoMovimentacao = typeof TIPOS_MOVIMENTACAO[keyof typeof TIPOS_MOVIMENTACAO]
-
-/**
- * Verifica se um usuário tem permissão para uma determinada ação
- */
-export function verificarPermissao(cargo: CargoUsuario, acao: string): boolean {
-  const permissoes = {
-    [CARGOS.OPERADOR_CAIXA]: [
-      'abrir_caixa',
-      'fechar_caixa',
-      'solicitar_sangria',
-      'solicitar_entrada',
-      'solicitar_correcao',
-      'visualizar_proprio_historico'
-    ],
-    [CARGOS.SUPERVISOR_CAIXA]: [
-      'conferir_caixa',
-      'aprovar_caixa',
-      'rejeitar_caixa',
-      'aprovar_sangria',
-      'aprovar_entrada',
-      'aprovar_correcao',
-      'visualizar_todos_caixas'
-    ],
-    [CARGOS.SUPERVISOR_CONFERENCIA]: [
-      'validacao_final',
-      'visualizar_painel_consolidado',
-      'gerenciar_configuracoes'
-    ],
-    [CARGOS.ADMIN]: [
-      'gerenciar_usuarios',
-      'visualizar_tudo',
-      'gerenciar_configuracoes',
-      'acesso_total'
-    ]
-  }
-
-  return permissoes[cargo]?.includes(acao) || cargo === CARGOS.ADMIN
-}
-
-/**
- * Busca configuração do sistema
- */
-export async function buscarConfiguracao(chave: string): Promise<string | null> {
-  try {
-    const config = await prisma.configuracaoSistema.findUnique({
-      where: { chave }
-    })
-    return config?.valor || null
-  } catch (error) {
-    console.error(`Erro ao buscar configuração ${chave}:`, error)
-    return null
-  }
-}
-
-/**
- * Atualiza configuração do sistema
- */
-export async function atualizarConfiguracao(chave: string, valor: string): Promise<boolean> {
-  try {
-    await prisma.configuracaoSistema.upsert({
-      where: { chave },
-      update: { valor },
-      create: { chave, valor }
-    })
-    return true
-  } catch (error) {
-    console.error(`Erro ao atualizar configuração ${chave}:`, error)
-    return false
-  }
-}
-
-/**
- * Verifica se a conferência cega está habilitada
- */
-export async function isConferenciaCegaHabilitada(): Promise<boolean> {
-  const valor = await buscarConfiguracao('conferencia_cega_dinheiro_habilitada')
-  return valor === 'true'
-}
-
-export default prisma
+// AI-NOTE: Exporta a instância única do PrismaClient.
+// Esta instância deve ser importada por todos os outros módulos da aplicação
+// que precisam interagir com o banco de dados.
+export default prisma;
